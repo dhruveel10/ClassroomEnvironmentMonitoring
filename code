@@ -1,0 +1,119 @@
+Steps for Thingspeak
+Create an account on Thingspeak. 
+Go to Create Channel and click on New Channel
+In the Name slot enter your project name. 
+In the Fields section enter the name of the sensors you will be using. (In this project Field 1 - Gas, Field 2 - Humidity and field 3 - Temperature )
+Open the project and go to API Keys. You will see "Write API Key" and under that 1 key, copy that key. Will be needed to paste in the code 
+As you run the program, Graph will keep on updating in their respective fields
+
+Code and Explanation 
+
+Arduino NodeMCU Code 
+#include <DHT.h>  				// Including library for dht
+#include <ESP8266WiFi.h>                         	// Including library for wifi
+String apiKey = "C42W897B8LXE84M9";               //Enter your Write API key from ThingSpeak
+const char *ssid =  "Wifi Name";          	      // replace with your wifi ssid and wpa2 key
+const char *pass =  "Password";                		// password
+const char* server = "api.thingspeak.com";
+
+#define DHTPIN 0          			 	                              //DHT11 pin
+DHT dht(DHTPIN, DHT11);
+int buzzer = D2;                                              	// Buzzer pin
+int LED = D7;                                                   // LED pin
+ 
+WiFiClient client;
+void setup()
+{
+  pinMode(buzzer, OUTPUT);
+  pinMode(LED, OUTPUT);
+  
+  Serial.begin(115200);                          // Starting serial communication with 115200 baud-rate
+  delay(10);
+  dht.begin();
+  
+  Serial.println("Connecting to ");
+  Serial.println(ssid);
+  WiFi.begin(ssid, pass);				//Starting WiFi connectivity
+  while (WiFi.status() != WL_CONNECTED)	//Checking WiFi connection
+  {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi connected");
+}
+
+void loop()
+{
+  float g = analogRead(A0);
+  if (isnan(g))                                     // if no numeric reading is received from gas sensor
+  {
+    Serial.println("Failed to read from MQ-5 sensor!");
+    return;
+  }
+  
+  float h = dht.readHumidity();
+  float t = dht.readTemperature();
+      
+              if (isnan(h) || isnan(t))        //if humidity or temperature numeric value is not received
+                 {
+                     Serial.println("Failed to read from DHT sensor!"); 
+                      return;
+                 } 
+
+  if(t>25){                                             // if temperature exceeds 25 deg Celsius, LED glows
+      digitalWrite(LED, HIGH);  
+   }
+   else{
+      digitalWrite(LED, LOW);
+   }
+
+  if(g>1){			                   // setting threshold as 1
+    tone(buzzer, 1000, 2000);            // Buzzer emits sound 1000Hz frequency, 2000ms time     duration
+  }
+  else{
+    tone(buzzer, 0, 2000);                   // No sound
+  }
+  
+  if (client.connect(server, 80)) // "184.106.153.149" or api.thingspeak.com
+  {
+// sending data on ThingSpeak and filling the data in their respective fields
+    String postStr = apiKey;
+    postStr += "&field1=";
+    postStr += String(g/1023*100);
+    postStr += "r\n";
+    postStr +="&field2=";
+    postStr += String(h);
+    postStr +="&field3=";
+    postStr += String(t);
+    postStr += "\r\n\r\n";
+    
+    client.print("POST /update HTTP/1.1\n");
+    client.print("Host: api.thingspeak.com\n");
+    client.print("Connection: close\n");
+    client.print("X-THINGSPEAKAPIKEY: " + apiKey + "\n");
+    client.print("Content-Type: application/x-www-form-urlencoded\n");
+    client.print("Content-Length: ");
+    client.print(postStr.length());
+    client.print("\n\n");
+    client.print(postStr);
+    
+
+//Serial printing data on Serial Monitor
+    Serial.println("Gas Level: ");
+    Serial.print(g/1023*100);
+    Serial.print("Temperature: ");
+    Serial.print(t);
+    Serial.print(" degrees Celcius, Humidity: ");
+    Serial.print(h);
+    Serial.println("Data Send to Thingspeak");
+    
+  }
+
+  delay(500);
+  client.stop();
+  Serial.println("Waiting...");
+   
+  // thingspeak needs minimum 15 sec delay between updates.
+delay(1500);
+}
